@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const GEMINI_MODELS = [
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent'
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
 ];
 
 async function callGeminiWithRetry(prompt: string, maxRetries = 3): Promise<string> {
@@ -84,11 +83,23 @@ export async function POST(request: NextRequest) {
     }
 
     const styleInstruction = style ? ` in a ${style} style` : '';
-    const prompt = `Please rewrite the following text to improve clarity, grammar, and flow${styleInstruction}. Keep the core meaning intact but make it more engaging and well-structured:
+    const prompt = `You are a professional editorial assistant specializing in enhancing clarity, flow, and structural integrity of text.
 
-"${text}"
+    ROLE & GOAL: Your primary task is to receive a block of user-provided text and rewrite it. The goal is to maximize readability, correct all grammatical errors, and improve the sentence structure and logical flow without changing the core factual meaning or intent.
 
-Rewritten text:`;
+    STYLE INSTRUCTION: ${styleInstruction}
+
+    PROCESS:
+    1.  Analyze the user's original text for clarity issues (e.g., passive voice, redundancy, jargon) and structural weaknesses.
+    2.  Apply the provided STYLE INSTRUCTION (if any) during the rewrite.
+    3.  Produce a single, cohesive, and polished revised text block.
+
+    CONSTRAINT: Do NOT include any commentary, explanations, or analysis. Output ONLY the rewritten text.
+
+    ORIGINAL TEXT:
+    Please rewrite the following text to improve clarity, grammar, and flow. Keep the core meaning intact but make it more engaging and well-structured:
+
+    ${text}`;
 
     try {
       const rewrittenText = await callGeminiWithRetry(prompt);
