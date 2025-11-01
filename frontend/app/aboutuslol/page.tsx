@@ -6,6 +6,7 @@ import muaaz from "@/public/muaaz.jpg"
 import arnav from "@/public/arnav.jpg"
 import { AnimatedTestimonials } from '@/components/ui/animated-testimonials'
 
+//test
 function AboutUs() {
     const weAre = [ 
         {
