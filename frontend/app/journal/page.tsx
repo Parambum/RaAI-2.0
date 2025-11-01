@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
@@ -19,10 +19,7 @@ import {
   IconPlayerPlay, 
   IconRefresh, 
   IconDeviceFloppy,
-  IconRobot,
-  IconCircleFilled,
-  IconSquare,
-  IconTrash
+  IconRobot
 } from "@tabler/icons-react"
 import Link from "next/link"
 
@@ -34,152 +31,29 @@ interface AnalysisResult {
   recommendations: string[]
 }
 
-
-
-
-
 export default function JournalPage() {
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const [journalText, setJournalText] = useState("")
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
 
-  const [isRecording, setIsRecording] = useState(false)
-  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
-  const [audioUrl, setAudioUrl] = useState<string | null>(null)
-
-  const [attachedImage, setAttachedImage] = useState<File | null>(null)
-  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null)
-
-
-  async function uploadAudio(audioFile: Blob){
-    const formData = new FormData();
-    formData.append('audio_file', audioFile, 'consultation_audio.webm');
-
-    try {
-        const response = await fetch('http://0.0.0.0:8000/api/transcribe', {
-            method: 'POST',
-            body: formData,
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const result = await response.json();
-        console.log('Result:', result);
-        setJournalText(journalText + result.data)
-        
-        
-    } catch (error) {
-        console.error('Error uploading audio for transcription:', error);
-    } finally { 
-    }
-};
-
-  const startRecording = async () => {
-    if (mediaRecorder) return; 
-    
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      setMediaRecorder(recorder);
-      
-      const audioChunks: Blob[] = [];
-      recorder.ondataavailable = (event) => {
-        audioChunks.push(event.data);
-      };
-
-      recorder.onstop = () => {
-        const blob = new Blob(audioChunks, { type: 'audio/webm' });
-        setAudioBlob(blob);
-        uploadAudio(blob)
-        const url = URL.createObjectURL(blob);
-        setAudioUrl(url);
-        // Stop all tracks in the stream
-        stream.getTracks().forEach(track => track.stop());
-        setIsRecording(false);
-      };
-
-      recorder.start();
-      setIsRecording(true);
-      setAudioBlob(null); 
-      setAudioUrl(null);
-    } catch (error) {
-      console.error('Error starting recording:', error);
-      alert("Microphone access denied or error starting recording.");
-      setIsRecording(false);
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-      mediaRecorder.stop();
-      setMediaRecorder(null);
-    }
-  };
-
-  const clearRecording = () => {
-    if (audioUrl) {
-      URL.revokeObjectURL(audioUrl);
-    }
-    setAudioBlob(null);
-    setAudioUrl(null);
-  };
-
-  const handleVoiceNote = () => {
-    if (isRecording) {
-      stopRecording();
-    } else if (!audioBlob) {
-      startRecording();
-    }
-  };
-
-  const handlePhotoAttachment = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file && file.type.startsWith('image/')) {
-      setAttachedImage(file);
-      if (imagePreviewUrl) {
-        URL.revokeObjectURL(imagePreviewUrl); 
-      }
-      setImagePreviewUrl(URL.createObjectURL(file));
-    }
-    event.target.value = '';
-  };
-
-  const clearImage = () => {
-    if (imagePreviewUrl) {
-      URL.revokeObjectURL(imagePreviewUrl);
-    }
-    setAttachedImage(null);
-    setImagePreviewUrl(null);
-  };
-
   const handleAnalyze = async () => {
-    if (!journalText.trim() && !audioBlob && !attachedImage) return;
+    if (!journalText.trim()) return;
   
     setIsAnalyzing(true);
     
     try {
-
-
+      // Submit to backend for analysis
       const analysisData = {
-        user_id: "temp-user-id",
-        mood: 3,
+        user_id: "temp-user-id", // Replace with actual user ID
+        mood: 3, // Default mood, could be from a slider
         journal: journalText,
-        audio_attachment: audioBlob ? `[Audio file attached: ${audioBlob.type}]` : null,
-        image_attachment: attachedImage ? `[Image file attached: ${attachedImage.name}]` : null,
         context: {}
       };
   
       const response = await apiClient.analyzeJournalEntry(analysisData);
       
       if (response.safety?.label === 'ESCALATE') {
+        // Handle safety concern
         setAnalysis({
           emotions: [],
           sentiment: 0,
@@ -188,6 +62,7 @@ export default function JournalPage() {
           recommendations: [response.message || "Please reach out for support"]
         });
       } else {
+        // Convert backend response to frontend format
         const backendAnalysis = response.analysis;
         const mockAnalysis = {
           emotions: backendAnalysis.emotions.map((e: { label: string; score: number }) => ({
@@ -210,17 +85,18 @@ export default function JournalPage() {
       
     } catch (error) {
       console.error('Analysis failed:', error);
+      // Fallback to mock analysis
       const mockAnalysis = {
         emotions: [
-          { name: "Focus", intensity: 0.7 },
-          { name: "Determination", intensity: 0.5 }
+          { name: "Reflection", intensity: 0.7 },
+          { name: "Curiosity", intensity: 0.5 }
         ],
-        sentiment: 0.3,
-        focus: "Goal Setting",
-        patterns: ["Positive self-talk"],
+        sentiment: 0.1,
+        focus: "Self-Awareness",
+        patterns: ["Introspective thinking"],
         recommendations: [
-          "Break down your goals into smaller steps",
-          "Review your progress at the end of the week"
+          "Continue regular journaling",
+          "Try mindfulness exercises"
         ]
       };
       setAnalysis(mockAnalysis);
@@ -228,6 +104,16 @@ export default function JournalPage() {
       setIsAnalyzing(false);
     }
   };
+
+  const handleVoiceNote = () => {
+    // Voice recording functionality would go here
+    alert("Voice recording feature coming soon!")
+  }
+
+  const handlePhotoAttachment = () => {
+    // Photo attachment functionality would go here
+    alert("Photo attachment feature coming soon!")
+  }
 
   const getSentimentColor = (sentiment: number) => {
     if (sentiment > 0.2) return "text-green-600"
@@ -241,7 +127,6 @@ export default function JournalPage() {
     return "Neutral"
   }
 
-  // --- UI Component ---
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <Card>
@@ -266,94 +151,29 @@ export default function JournalPage() {
               className="min-h-[150px] text-base"
             />
             
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept="image/*"
-              className="hidden"
-            />
-
-            {(audioUrl || attachedImage) && (
-              <div className="flex flex-col gap-3 p-4 border rounded-lg bg-gray-50 dark:bg-gray-800">
-                <h4 className="text-sm font-medium">Attachments:</h4>
-                {audioUrl && (
-                  <div className="flex items-center justify-between p-2 border rounded-md bg-white dark:bg-gray-700">
-                    <div className="flex items-center gap-2">
-                      <IconMicrophone className="h-4 w-4 text-blue-500" />
-                      <span className="text-sm">Voice Note Attached</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <audio controls src={audioUrl} className="h-8" />
-                      <Button variant="ghost" size="icon" onClick={clearRecording}>
-                        <IconTrash className="h-4 w-4 text-red-500" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                {attachedImage && imagePreviewUrl && (
-                  <div className="flex items-center justify-between p-2 border rounded-md bg-white dark:bg-gray-700">
-                    <div className="flex items-center gap-2">
-                      <IconPhoto className="h-4 w-4 text-blue-500" />
-                      <span className="text-sm font-medium truncate max-w-[150px]">{attachedImage.name}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <img src={imagePreviewUrl} alt="Preview" className="h-8 w-8 object-cover rounded" />
-                      <Button variant="ghost" size="icon" onClick={clearImage}>
-                        <IconTrash className="h-4 w-4 text-red-500" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-            
+            {/* Action Buttons */}
             <div className="flex flex-wrap gap-3">
               <Button
                 onClick={handleVoiceNote}
-                variant={isRecording ? "destructive" : (audioBlob ? "outline" : "outline")}
+                variant="outline"
                 size="sm"
                 className="flex items-center gap-2"
-                disabled={!!audioBlob && !isRecording} 
               >
-                {isRecording ? (
-                  <>
-                    <IconSquare className="h-4 w-4" />
-                    Stop Recording
-                  </>
-                ) : audioBlob ? (
-                  <>
-                    <IconTrash className="h-4 w-4" />
-                    Clear Voice Note
-                  </>
-                ) : (
-                  <>
-                    <IconMicrophone className="h-4 w-4" />
-                    Voice Note
-                  </>
-                )}
+                <IconMicrophone className="h-4 w-4" />
+                Voice Note
               </Button>
               <Button
-                onClick={attachedImage ? clearImage : handlePhotoAttachment}
-                variant={attachedImage ? "outline" : "outline"}
+                onClick={handlePhotoAttachment}
+                variant="outline"
                 size="sm"
                 className="flex items-center gap-2"
               >
-                {attachedImage ? (
-                  <>
-                    <IconTrash className="h-4 w-4" />
-                    Remove Photo
-                  </>
-                ) : (
-                  <>
-                    <IconPhoto className="h-4 w-4" />
-                    Add Photo
-                  </>
-                )}
+                <IconPhoto className="h-4 w-4" />
+                Add Photo
               </Button>
               <Button
                 onClick={handleAnalyze}
-                disabled={(!journalText.trim() && !audioBlob && !attachedImage) || isAnalyzing}
+                disabled={!journalText.trim() || isAnalyzing}
                 className="flex items-center gap-2"
               >
                 <IconBrain className="h-4 w-4" />
@@ -362,6 +182,7 @@ export default function JournalPage() {
             </div>
           </div>
 
+          {/* Analysis Results */}
           {analysis && (
             <Card className="border-2 border-blue-200 dark:border-blue-800">
               <CardHeader>
@@ -371,6 +192,7 @@ export default function JournalPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
+                {/* Emotions Detected */}
                 <div className="space-y-3">
                   <h4 className="font-medium flex items-center gap-2">
                     <IconMoodHappy className="h-4 w-4" />
@@ -396,6 +218,7 @@ export default function JournalPage() {
                   </div>
                 </div>
 
+                {/* Sentiment & Focus */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <h4 className="font-medium flex items-center gap-2">
@@ -424,6 +247,7 @@ export default function JournalPage() {
                   </div>
                 </div>
 
+                {/* Patterns Identified */}
                 <div className="space-y-3">
                   <h4 className="font-medium flex items-center gap-2">
                     <IconBulb className="h-4 w-4" />
@@ -439,6 +263,7 @@ export default function JournalPage() {
                   </ul>
                 </div>
 
+                {/* Recommendations */}
                 <div className="space-y-3">
                   <h4 className="font-medium flex items-center gap-2">
                     <IconSparkles className="h-4 w-4" />
@@ -483,13 +308,11 @@ export default function JournalPage() {
                 localStorage.setItem('lastJournalEntry', JSON.stringify({
                   date: new Date().toISOString(),
                   text: journalText,
-                  analysis,
-                  audio: audioUrl ? 'attached' : 'none',
-                  image: attachedImage ? 'attached' : 'none'
+                  analysis
                 }))
                 alert("Journal entry saved!")
               }}
-              disabled={!journalText.trim() && !audioBlob && !attachedImage}
+              disabled={!journalText.trim()}
               className="flex items-center gap-2"
             >
               <IconDeviceFloppy className="h-4 w-4" />

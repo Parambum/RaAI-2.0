@@ -52,7 +52,7 @@ const chartConfig = {
   annotate: { label: "Self Regulation", color: "#f59e42" },
   review: { label: "Motivation", color: "#10b981" },
   train: { label: "Empathy", color: "#ef4444" },
-  analyze: { label: "Social Skills", color: "#f472b6" },
+  analyze: { label: "Empathy", color: "#f472b6" },
 } satisfies ChartConfig
 
 export function ChartAreaInteractive() {

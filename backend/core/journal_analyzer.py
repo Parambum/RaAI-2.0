@@ -189,10 +189,9 @@ def analyze_entry(payload: dict, llm) -> dict:
         else:
             one_line = "Notice what helped today and repeat it."
 
-    # If journal is effectively empty, set neutral defaults
+    # If journal is effectively empty, force neutral defaults regardless of LLM output
     if not journal.strip():
-        if not emotions:
-            emotions = [{"label": "neutral", "score": 0.0}]
+        emotions = [{"label": "neutral", "score": 0.0}]
         sentiment = 0.0
         topics = []
         facet_signals = _ensure_all_facets({})
