@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from "react"
+import { useState, useRef } from "react" // <-- IMPORT useRef HERE
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
@@ -19,7 +19,11 @@ import {
   IconPlayerPlay, 
   IconRefresh, 
   IconDeviceFloppy,
-  IconRobot
+  IconRobot,
+  IconSquare,
+  IconTrash,
+  IconClockHour4,
+  IconTag,
 } from "@tabler/icons-react"
 import Link from "next/link"
 
@@ -31,29 +35,168 @@ interface AnalysisResult {
   recommendations: string[]
 }
 
+interface SavedJournalEntry {
+  id: string; 
+  date: string;
+  text: string;
+  analysis: AnalysisResult | null;
+  audioUrl: string | null;
+  imageFileName: string | null;
+}
+
+const mockFile = (fileName: string) => ({ 
+    name: fileName, 
+    type: 'image/jpeg', 
+    size: 1024, 
+    lastModified: Date.now() 
+}) as unknown as File;
+
+
 export default function JournalPage() {
+  // 1. RE-DECLARE useRef
+  const fileInputRef = useRef<HTMLInputElement>(null) 
+  
   const [journalText, setJournalText] = useState("")
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
 
+  const [isRecording, setIsRecording] = useState(false)
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
+  const [audioUrl, setAudioUrl] = useState<string | null>(null)
+
+  const [attachedImage, setAttachedImage] = useState<File | null>(null)
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null)
+  
+  const [savedEntries, setSavedEntries] = useState<SavedJournalEntry[]>([])
+
+
+  async function uploadAudio(audioFile: Blob){
+    const formData = new FormData();
+    formData.append('audio_file', audioFile, 'consultation_audio.webm');
+
+    try {
+        const response = await fetch('http://0.0.0.0:8000/api/transcribe', {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        setJournalText(journalText + result.data)
+        
+        
+    } catch (error) {
+        console.error('Error uploading audio for transcription:', error);
+    } finally { 
+    }
+};
+
+  const startRecording = async () => {
+    if (mediaRecorder) return; 
+    
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      setMediaRecorder(recorder);
+      
+      const audioChunks: Blob[] = [];
+      recorder.ondataavailable = (event) => {
+        audioChunks.push(event.data);
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(audioChunks, { type: 'audio/webm' });
+        setAudioBlob(blob);
+        uploadAudio(blob)
+        const url = URL.createObjectURL(blob);
+        setAudioUrl(url);
+        stream.getTracks().forEach(track => track.stop());
+        setIsRecording(false);
+      };
+
+      recorder.start();
+      setIsRecording(true);
+      setAudioBlob(null); 
+      setAudioUrl(null);
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      alert("Microphone access denied or error starting recording.");
+      setIsRecording(false);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+      setMediaRecorder(null);
+    }
+  };
+
+  const clearRecording = () => {
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+    }
+    setAudioBlob(null);
+    setAudioUrl(null);
+  };
+
+  const handleVoiceNote = () => {
+    if (isRecording) {
+      stopRecording();
+    } else if (!audioBlob) {
+      startRecording();
+    }
+  };
+
+  const handlePhotoAttachment = () => {
+    // This requires fileInputRef to be defined and attached to a hidden input
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      setAttachedImage(file);
+      if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl); 
+      }
+      setImagePreviewUrl(URL.createObjectURL(file));
+    }
+    event.target.value = '';
+  };
+
+  const clearImage = () => {
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl);
+    }
+    setAttachedImage(null);
+    setImagePreviewUrl(null);
+  };
+
   const handleAnalyze = async () => {
-    if (!journalText.trim()) return;
+    // ADDED CHECK for audioBlob or attachedImage to allow analysis without text
+    if (!journalText.trim() && !audioBlob && !attachedImage) return;
   
     setIsAnalyzing(true);
     
     try {
-      // Submit to backend for analysis
       const analysisData = {
         user_id: "temp-user-id", // Replace with actual user ID
         mood: 3, // Default mood, could be from a slider
         journal: journalText,
+        // Added attachment placeholders back for full analysis functionality
+        audio_attachment: audioBlob ? `[Audio file attached: ${audioBlob.type}]` : null,
+        image_attachment: attachedImage ? `[Image file attached: ${attachedImage.name}]` : null,
         context: {}
       };
   
       const response = await apiClient.analyzeJournalEntry(analysisData);
       
       if (response.safety?.label === 'ESCALATE') {
-        // Handle safety concern
         setAnalysis({
           emotions: [],
           sentiment: 0,
@@ -62,7 +205,6 @@ export default function JournalPage() {
           recommendations: [response.message || "Please reach out for support"]
         });
       } else {
-        // Convert backend response to frontend format
         const backendAnalysis = response.analysis;
         const mockAnalysis = {
           emotions: backendAnalysis.emotions.map((e: { label: string; score: number }) => ({
@@ -85,7 +227,6 @@ export default function JournalPage() {
       
     } catch (error) {
       console.error('Analysis failed:', error);
-      // Fallback to mock analysis
       const mockAnalysis = {
         emotions: [
           { name: "Reflection", intensity: 0.7 },
@@ -105,15 +246,58 @@ export default function JournalPage() {
     }
   };
 
-  const handleVoiceNote = () => {
-    // Voice recording functionality would go here
-    alert("Voice recording feature coming soon!")
-  }
+  const handleSaveEntry = () => {
+    if (!journalText.trim() && !audioBlob && !attachedImage) return;
 
-  const handlePhotoAttachment = () => {
-    // Photo attachment functionality would go here
-    alert("Photo attachment feature coming soon!")
-  }
+    const newEntry: SavedJournalEntry = {
+      id: Date.now().toString(),
+      date: new Date().toISOString(),
+      text: journalText,
+      analysis,
+      audioUrl,
+      imageFileName: attachedImage?.name || null,
+    };
+
+    setSavedEntries((prevEntries) => [newEntry, ...prevEntries]);
+
+    localStorage.setItem('lastJournalEntry', JSON.stringify({
+      date: newEntry.date,
+      text: newEntry.text,
+      analysis: newEntry.analysis,
+      audio: newEntry.audioUrl ? 'attached' : 'none',
+      image: newEntry.imageFileName ? 'attached' : 'none'
+    }));
+
+    setJournalText("");
+    setAnalysis(null);
+    clearRecording();
+    clearImage();
+  };
+
+  const handleLoadEntry = (entry: SavedJournalEntry) => {
+    setJournalText(entry.text);
+    setAnalysis(entry.analysis);
+
+    if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+    }
+    setAudioUrl(entry.audioUrl);
+
+    if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl);
+    }
+    if (entry.imageFileName) {
+        const file = mockFile(entry.imageFileName);
+        setAttachedImage(file);
+
+    } else {
+        setAttachedImage(null);
+        setImagePreviewUrl(null);
+    }
+
+    alert(`Entry from ${new Date(entry.date).toLocaleTimeString()} loaded.`);
+  };
+
 
   const getSentimentColor = (sentiment: number) => {
     if (sentiment > 0.2) return "text-green-600"
@@ -125,6 +309,12 @@ export default function JournalPage() {
     if (sentiment > 0.2) return "Positive"
     if (sentiment < -0.2) return "Negative"
     return "Neutral"
+  }
+
+  const getBadgeColorClass = (sentiment: number) => {
+    if (sentiment > 0.2) return "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300";
+    if (sentiment < -0.2) return "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300";
+    return "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300";
   }
 
   return (
@@ -141,7 +331,6 @@ export default function JournalPage() {
         </CardHeader>
         
         <CardContent className="space-y-6">
-          {/* Journal Input */}
           <div className="space-y-4">
             <h3 className="text-lg font-medium">How was your day?</h3>
             <Textarea
@@ -151,29 +340,99 @@ export default function JournalPage() {
               className="min-h-[150px] text-base"
             />
             
+            {/* 2. RE-ADD THE HIDDEN INPUT FIELD */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept="image/*"
+              className="hidden"
+            />
+            
+            {/* ATTACHMENTS DISPLAY SECTION (re-added the complete attachment display logic) */}
+            {(audioUrl || attachedImage) && (
+              <div className="flex flex-col gap-3 p-4 border rounded-lg bg-gray-50 dark:bg-gray-800">
+                <h4 className="text-sm font-medium">Attachments:</h4>
+                {audioUrl && (
+                  <div className="flex items-center justify-between p-2 border rounded-md bg-white dark:bg-gray-700">
+                    <div className="flex items-center gap-2">
+                      <IconMicrophone className="h-4 w-4 text-blue-500" />
+                      <span className="text-sm">Voice Note Attached</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <audio controls src={audioUrl} className="h-8" />
+                      <Button variant="ghost" size="icon" onClick={clearRecording}>
+                        <IconTrash className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                {attachedImage && imagePreviewUrl && (
+                  <div className="flex items-center justify-between p-2 border rounded-md bg-white dark:bg-gray-700">
+                    <div className="flex items-center gap-2">
+                      <IconPhoto className="h-4 w-4 text-blue-500" />
+                      <span className="text-sm font-medium truncate max-w-[150px]">{attachedImage.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <img src={imagePreviewUrl} alt="Preview" className="h-8 w-8 object-cover rounded" />
+                      <Button variant="ghost" size="icon" onClick={clearImage}>
+                        <IconTrash className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-3">
               <Button
                 onClick={handleVoiceNote}
-                variant="outline"
+                // Updated variant/icons for voice note state
+                variant={isRecording ? "destructive" : (audioBlob ? "outline" : "outline")}
                 size="sm"
                 className="flex items-center gap-2"
+                disabled={!!audioBlob && !isRecording} 
               >
-                <IconMicrophone className="h-4 w-4" />
-                Voice Note
+                {isRecording ? (
+                  <>
+                    <IconSquare className="h-4 w-4" />
+                    Stop Recording
+                  </>
+                ) : audioBlob ? (
+                  <>
+                    <IconTrash className="h-4 w-4" />
+                    Clear Voice Note
+                  </>
+                ) : (
+                  <>
+                    <IconMicrophone className="h-4 w-4" />
+                    Voice Note
+                  </>
+                )}
               </Button>
               <Button
-                onClick={handlePhotoAttachment}
-                variant="outline"
+                onClick={attachedImage ? clearImage : handlePhotoAttachment}
+                variant={attachedImage ? "outline" : "outline"}
                 size="sm"
                 className="flex items-center gap-2"
               >
-                <IconPhoto className="h-4 w-4" />
-                Add Photo
+                {attachedImage ? (
+                  <>
+                    <IconTrash className="h-4 w-4" />
+                    Remove Photo
+                  </>
+                ) : (
+                  <>
+                    <IconPhoto className="h-4 w-4" />
+                    Add Photo
+                  </>
+                )}
               </Button>
               <Button
                 onClick={handleAnalyze}
-                disabled={!journalText.trim() || isAnalyzing}
+                // Updated disabled logic for analysis
+                disabled={(!journalText.trim() && !audioBlob && !attachedImage) || isAnalyzing}
                 className="flex items-center gap-2"
               >
                 <IconBrain className="h-4 w-4" />
@@ -278,7 +537,6 @@ export default function JournalPage() {
                   </div>
                 </div>
 
-                {/* Action Buttons */}
                 <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t">
                   <Link href="/exercise" className="flex-1">
                     <Button className="w-full flex items-center gap-2">
@@ -299,20 +557,11 @@ export default function JournalPage() {
             </Card>
           )}
 
-          {/* Save Entry */}
           <div className="flex justify-center pt-6">
             <Button 
               variant="outline" 
-              onClick={() => {
-                // Save journal entry logic
-                localStorage.setItem('lastJournalEntry', JSON.stringify({
-                  date: new Date().toISOString(),
-                  text: journalText,
-                  analysis
-                }))
-                alert("Journal entry saved!")
-              }}
-              disabled={!journalText.trim()}
+              onClick={handleSaveEntry}
+              disabled={!journalText.trim() && !audioBlob && !attachedImage}
               className="flex items-center gap-2"
             >
               <IconDeviceFloppy className="h-4 w-4" />
@@ -321,6 +570,58 @@ export default function JournalPage() {
           </div>
         </CardContent>
       </Card>
+      
+      {savedEntries.length > 0 && (
+        <div className="mt-8 p-6 border rounded-xl shadow-lg bg-white dark:bg-gray-800">
+          <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+            <IconClockHour4 className="h-5 w-5 text-gray-500" />
+            Saved Entries History ({savedEntries.length})
+          </h3>
+          <div className="space-y-4">
+            {savedEntries.map((entry) => (
+              <div 
+                key={entry.id} 
+                className="p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition duration-150 cursor-pointer" // Added cursor-pointer
+                onClick={() => handleLoadEntry(entry)} // Added onClick handler
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-semibold text-sm text-blue-600 dark:text-blue-400">
+                    {new Date(entry.date).toLocaleString()}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    {entry.audioUrl && (
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                        <IconMicrophone className="h-3 w-3 mr-1" /> Audio
+                      </Badge>
+                    )}
+                    {entry.imageFileName && (
+                      <Badge variant="secondary" className="bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300">
+                        <IconPhoto className="h-3 w-3 mr-1" /> Photo
+                      </Badge>
+                    )}
+                    {entry.analysis?.sentiment !== undefined && (
+                      <Badge 
+                        className={`text-xs font-medium ${getBadgeColorClass(entry.analysis.sentiment)}`}
+                      >
+                         <IconTag className="h-3 w-3 mr-1" /> 
+                         {getSentimentLabel(entry.analysis.sentiment)}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-2">
+                  Entry: {entry.text.substring(0, 150)}{entry.text.length > 150 ? "..." : ""}
+                </p>
+                {entry.analysis?.focus && (
+                    <p className="text-xs mt-1 text-gray-500 dark:text-gray-400">
+                        Focus: {entry.analysis.focus}
+                    </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
