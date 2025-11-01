@@ -17,31 +17,31 @@ export function NavbarComponent() {
   const navItems = [
     {
       name: "Today",
-      link: "today",
+      link: "/today",
     },
     {
       name: "Dashboard",
-      link: "dashboard",
+      link: "/dashboard",
     },
     {
       name: "Journal",
-      link: "journal",
+      link: "/journal",
     },
     {
       name: "Exercises",
-      link: "exercise",
+      link: "/exercise",
     },
     {
       name: "Community Wellness",
-      link: "community-wellness"
+      link: "/community-wellness"
     },
     {
       name:"Mood Index",
-      link:"moodindex"
+      link:"/moodindex"
     }, 
     {
       name: "Rewriter",
-      link: "collab-rewriter"
+      link: "/collab-rewriter"
     },
   ];
 
@@ -78,7 +78,10 @@ export function NavbarComponent() {
               <a
                 key={`mobile-link-${idx}`}
                 href={item.link}
-                onClick={() => setIsMobileMenuOpen(false)}
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  window.location.href = item.link;
+                }}
                 className="relative text-neutral-600 dark:text-neutral-300"
               >
                 <span className="block">{item.name}</span>

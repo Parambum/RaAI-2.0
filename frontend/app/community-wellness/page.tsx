@@ -45,22 +45,37 @@ const Challenges = () => {
         }));
     };
 
-    const handleCompleteDay = (challengeId: string) => {
+    const handleCompleteDay = async (challengeId: string) => {
         const today = new Date().toISOString().slice(0, 10);
-        setUserChallenges(prev => {
-            const currentData = prev[challengeId];
-            if (currentData.lastCompletedDate === today) {
-                return prev;
-            }
-            return {
-                ...prev,
-                [challengeId]: {
-                    ...currentData,
-                    currentStreak: currentData.currentStreak + 1,
-                    lastCompletedDate: today
+        
+        // Update state first
+        await new Promise<void>(resolve => {
+            setUserChallenges(prev => {
+                const currentData = prev[challengeId];
+                if (currentData.lastCompletedDate === today) {
+                    resolve();
+                    return prev;
                 }
-            };
+                resolve();
+                return {
+                    ...prev,
+                    [challengeId]: {
+                        ...currentData,
+                        currentStreak: currentData.currentStreak + 1,
+                        lastCompletedDate: today
+                    }
+                };
+            });
         });
+
+        // Redirect based on challenge ID after state is updated
+        if (challengeId === '1') { // Daily Gratitude
+            window.location.href = '/exercise/gratitude-practice';
+        } else if (challengeId === '2') { // Mindful Breathing
+            window.location.href = '/exercise/box-breathing';
+        } else if (challengeId === '3') { // Positive Affirmations
+            window.location.href = '/exercise/perspective-taking';
+        }
     };
 
     if (loading) {

@@ -424,13 +424,22 @@ export default function ExercisePage() {
                 </ul>
               </div>
               
-              <Button 
-                onClick={() => startExercise(exercise)}
-                className="w-full flex items-center gap-2"
-              >
-                <IconPlayerPlay className="h-4 w-4" />
-                Start Exercise
-              </Button>
+              {['box-breathing', 'perspective-taking', 'gratitude-practice'].includes(exercise.id) ? (
+                <Link href={`/exercise/${exercise.id}`}>
+                  <Button className="w-full flex items-center gap-2">
+                    <IconPlayerPlay className="h-4 w-4" />
+                    Start Exercise
+                  </Button>
+                </Link>
+              ) : (
+                <Button 
+                  onClick={() => startExercise(exercise)}
+                  className="w-full flex items-center gap-2"
+                >
+                  <IconPlayerPlay className="h-4 w-4" />
+                  Start Exercise
+                </Button>
+              )}
             </CardContent>
           </Card>
         ))}
