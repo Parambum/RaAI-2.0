@@ -36,18 +36,32 @@ app.add_middleware(
 
 # Get Gemini API Key from environment
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 
 async def call_gemini(prompt: str):
     """Call Gemini API for real AI responses"""
     if not GEMINI_API_KEY:
         return "Mock response: I'm here to help you with your emotional wellness journey."
+
+    SYSTEM_PROMPT = """
+        You are 'Aura', a compassionate and non-judgmental AI emotional wellness companion. 
+        Your role is to listen empathetically, validate the user's feelings, and offer reflective 
+        questions or gentle coping suggestions. Do not diagnose or offer professional medical advice. 
+        Keep your responses concise, supportive, and focused on helping the user explore their current state.
+        """
     
+
     try:
         payload = {
-            "contents": [{"parts": [{"text": prompt}]}]
+            "config": {
+                "system_instruction": SYSTEM_PROMPT
+            },
+            "contents": [
+                {"role": "user", "parts": [{"text": prompt}]}
+            ]
         }
-        
+        print(GEMINI_API_KEY)
+        print(GEMINI_URL)
         response = requests.post(
             f"{GEMINI_URL}?key={GEMINI_API_KEY}",
             json=payload,
@@ -56,9 +70,12 @@ async def call_gemini(prompt: str):
         
         if response.status_code == 200:
             data = response.json()
-            return data["candidates"][0]["content"]["parts"][0]["text"]
+            try:
+                return data["candidates"][0]["content"]["parts"][0]["text"]
+            except (KeyError, IndexError):
+                return "I hear you, but I couldn't process that thought clearly. Can you rephrase?"
         else:
-            return "I'm here to support you. How are you feeling right now?"
+            return "I'm here to support you. How are you feeling right now?" + str(response.text)
     except Exception as e:
         return "I understand you're reaching out. What's on your mind today?"
 
